@@ -10,15 +10,33 @@ export function downloadBlob(blob, filename) {
 }
 function csvCell(value) {
   const text = value == null ? '' : String(value);
-  const escaped = text.replaceAll('"', '""');
-  return /^[=+@\-\t\r]/.test(text) || /[",\r\n]/.test(text) ? `"${escaped.startsWith('=') || /^[+@\-\t\r]/.test(text) ? "'" : ''}${escaped}"` : escaped;
+  const safe = /^[\s]*[=+@\-]|^[\t\r\n]/.test(text) ? "'" + text : text;
+  return /[",\r\n]/.test(safe) ? `"${safe.replaceAll('"', '""')}"` : safe;
 }
-/** CSV protects against spreadsheet formula injection. Pass accessorKey columns. */
+
+function exportColumns(columns) {
+  return columns.flatMap(column => {
+    if (column.enableExport === false) return [];
+    if (column.columns) return exportColumns(column.columns);
+    return column.accessorKey || column.accessorFn || column.exportValue ? [column] : [];
+  });
+}
+
+/** Serialize raw values, including nested keys and accessor functions. */
+export function rowsToCsv({ rows, columns }) {
+  const fields = exportColumns(columns);
+  const lines = [fields.map(c => csvCell(c.exportHeader ??
+    (typeof c.header === 'string' ? c.header : c.id ?? c.accessorKey ?? ''))).join(',')];
+  rows.forEach((row, index) => lines.push(fields.map(c => {
+    const value = c.exportValue ? c.exportValue(row, index) : c.accessorFn ? c.accessorFn(row, index) :
+      c.accessorKey.split('.').reduce((value, key) => value?.[key], row);
+    return csvCell(value);
+  }).join(',')));
+  return lines.join('\r\n');
+}
+
 export function exportRowsAsCsv({ rows, columns, filename = 'table.csv' }) {
-  const fields = columns.filter(c => c.accessorKey && c.enableExport !== false);
-  const lines = [fields.map(c => csvCell(typeof c.header === 'string' ? c.header : c.accessorKey)).join(',')];
-  rows.forEach(row => lines.push(fields.map(c => csvCell(row[c.accessorKey])).join(',')));
-  downloadBlob(new Blob(['\uFEFF', lines.join('\r\n')], { type: 'text/csv;charset=utf-8' }), filename);
+  downloadBlob(new Blob(['\uFEFF', rowsToCsv({ rows, columns })], { type: 'text/csv;charset=utf-8' }), filename);
 }
 /** Server export is recommended for full datasets and Excel/PDF. */
 export async function exportWithEndpoint({ url, filename, fetcher = fetch, signal, method = 'GET', body }) {

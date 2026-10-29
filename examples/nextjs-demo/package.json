@@ -1,1 +1,22 @@
-{"name":"nextjs-demo","private":true,"type":"module","scripts":{"dev":"next dev","build":"next build"},"dependencies":{"next":"^15.0.0","react":"^19.0.0","react-dom":"^19.0.0","@mui/material":"^7.0.0","@emotion/react":"^11.0.0","@emotion/styled":"^11.0.0","@tanstack/react-table":"^8.0.0","@company/mui-dynamic-table":"file:../.."}}
+{
+  "name": "nextjs-demo",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build"
+  },
+  "dependencies": {
+    "next": "^16.4.3",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "@mui/material": "^9.5.0",
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.1",
+    "@tanstack/react-table": "^9.3.1",
+    "@company/mui-dynamic-table": "file:../.."
+  },
+  "engines": {
+    "node": "^22.22.2 || ^24.15.0 || >=26.0.0"
+  }
+}
