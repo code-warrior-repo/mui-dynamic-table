@@ -1,0 +1,1 @@
+{"name":"nextjs-demo","private":true,"type":"module","scripts":{"dev":"next dev","build":"next build"},"dependencies":{"next":"^15.0.0","react":"^19.0.0","react-dom":"^19.0.0","@mui/material":"^7.0.0","@emotion/react":"^11.0.0","@emotion/styled":"^11.0.0","@tanstack/react-table":"^8.0.0","@company/mui-dynamic-table":"file:../.."}}

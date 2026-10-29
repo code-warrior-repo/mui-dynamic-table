@@ -1,0 +1,45 @@
+name: Publish to JFrog Artifactory
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: read
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: release
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm install --no-audit --no-fund
+      - run: npm run check
+      - name: Verify release tag matches package version
+        run: |
+          node -e "if ('v'+require('./package.json').version !== process.env.GITHUB_REF_NAME) process.exit(1)"
+      - name: Configure private npm registry
+        env:
+          REGISTRY: ${{ vars.ARTIFACTORY_NPM_URL }}
+          TOKEN: ${{ secrets.ARTIFACTORY_NPM_TOKEN }}
+        run: |
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const { REGISTRY, TOKEN } = process.env;
+          if (!REGISTRY || !TOKEN) throw Error('Missing Artifactory configuration');
+          const u = new URL(REGISTRY);
+          if (u.protocol !== 'https:') throw Error('Artifactory registry must use HTTPS');
+          const path = u.pathname.endsWith('/') ? u.pathname : u.pathname + '/';
+          fs.writeFileSync('.npmrc', `@company:registry=${u.origin}${path}
+//${u.host}${path}:_authToken=${TOKEN}
+always-auth=true
+`, { mode: 0o600 });
+          NODE
+      - name: Publish
+        env:
+          REGISTRY: ${{ vars.ARTIFACTORY_NPM_URL }}
+        run: npm publish --registry "$REGISTRY"
+      - name: Remove registry credentials
+        if: always()
+        run: rm -f .npmrc
