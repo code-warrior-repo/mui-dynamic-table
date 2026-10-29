@@ -1,11 +1,12 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useId, useMemo, useState } from 'react';
 import {
   Box, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
   TableSortLabel, TablePagination, Toolbar, Typography, TextField, Checkbox,
-  Button, CircularProgress, Alert, Stack, useMediaQuery
+  Button, CircularProgress, Alert, Stack, Menu, MenuItem, SvgIcon, useMediaQuery
 } from '@mui/material';
+import { defaultExportHandlers } from './exports.js';
 import { useTheme } from '@mui/material/styles';
 import {
   flexRender, useTable, tableFeatures, columnFilteringFeature, globalFilteringFeature,
@@ -29,9 +30,13 @@ const features = tableFeatures({
   sortFns
 });
 
+function ExportIcon() {
+  return <SvgIcon fontSize="small"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v3h14v-3H5z"/></SvgIcon>;
+}
+
 /**
  * dataSource(args) => Promise<{rows,rowCount,pageCount?}> for server mode.
- * exportHandlers: {csv?, excel?, pdf?}; handlers receive {rows, columns, state}.
+ * exportHandlers: {pdf?, txt?, json?, xlsx?, csv?}; handlers receive {rows, columns, state}.
  * Server handlers should export the complete filtered dataset, not just current rows.
  */
 export default function DynamicTable({
@@ -39,7 +44,10 @@ export default function DynamicTable({
   enableSorting = true, enableFiltering = true, enablePagination = true,
   enableRowSelection = false, enableGlobalSearch = true,
   enableColumnFilters = false, pageSize = 20, pageSizeOptions = [10, 20, 50, 100],
-  rowActions, toolbarActions, exportHandlers = {}, onRowSelectionChange,
+  rowActions, toolbarActions, exportHandlers = {},
+  enableExport = true, exportFormats = ['pdf', 'txt', 'json', 'xlsx', 'csv'],
+  exportFilename = 'table', exportButtonDisplay = 'both', exportLabel = 'Export',
+  onRowSelectionChange,
   onStateChange, loading: externalLoading = false, error: externalError,
   emptyMessage = 'No records found', initialSorting = [],
   sx, ...paperProps
@@ -55,6 +63,8 @@ export default function DynamicTable({
   const [requestError, setRequestError] = useState(null);
   const [exportError, setExportError] = useState(null);
   const [exportingFormat, setExportingFormat] = useState(null);
+  const [exportAnchor, setExportAnchor] = useState(null);
+  const exportMenuId = useId();
   const theme = useTheme();
   const compact = useMediaQuery(theme.breakpoints.down('sm'));
 
@@ -110,7 +120,11 @@ export default function DynamicTable({
   useEffect(() => { onRowSelectionChange?.(rowSelection); }, [rowSelection, onRowSelectionChange]);
   useEffect(() => { onStateChange?.(state); }, [state, onStateChange]);
   const rows = table.getRowModel().rows;
-  const exporting = Object.entries(exportHandlers).filter(([, handler]) => typeof handler === 'function');
+  const handlers = { ...defaultExportHandlers, ...exportHandlers };
+  // Preserve the earlier 'excel' handler name while displaying XLSX once.
+  if (!exportHandlers.xlsx && exportHandlers.excel) handlers.xlsx = exportHandlers.excel;
+  const exporting = [...new Set(exportFormats.map(format => format === 'excel' ? 'xlsx' : format))]
+    .filter(format => typeof handlers[format] === 'function');
   const exportContext = () => ({
     rows: (server ? rows : table.getPrePaginatedRowModel().rows).map(r => r.original),
     columns, state
@@ -118,7 +132,8 @@ export default function DynamicTable({
   const runExport = async (format, handler) => {
     setExportError(null);
     setExportingFormat(format);
-    try { await handler(exportContext()); }
+    setExportAnchor(null);
+    try { await handler({ ...exportContext(), filename: `${exportFilename}.${format}`, title }); }
     catch (err) { setExportError(err?.message || 'Unable to export data'); }
     finally { setExportingFormat(null); }
   };
@@ -129,7 +144,23 @@ export default function DynamicTable({
       <Typography variant="h6" sx={{ flexGrow: 1 }}>{title}</Typography>
       {enableGlobalSearch && <TextField size="small" label="Search" value={globalFilter ?? ''} onChange={e => table.setGlobalFilter(e.target.value)} />}
       {toolbarActions?.({ table, state })}
-      {exporting.map(([format, handler]) => <Button key={format} size="small" variant="outlined" disabled={Boolean(exportingFormat) || busy || externalLoading} onClick={() => runExport(format, handler)}>Export {format.toUpperCase()}</Button>)}
+      {enableExport && exporting.length > 0 && <>
+        <Button size="small" variant="outlined" aria-label={exportLabel}
+          id={`${exportMenuId}-button`} aria-controls={exportAnchor ? exportMenuId : undefined}
+          aria-haspopup="menu" aria-expanded={Boolean(exportAnchor)}
+          title={exportButtonDisplay === 'icon' ? exportLabel : undefined}
+          disabled={Boolean(exportingFormat) || busy || externalLoading}
+          onClick={event => setExportAnchor(event.currentTarget)}
+          sx={exportButtonDisplay === 'icon' ? { minWidth: 40, px: 1 } : undefined}
+          startIcon={exportButtonDisplay === 'both' ? <ExportIcon/> : undefined}>
+          {exportingFormat ? 'Exporting…' : exportButtonDisplay === 'icon' ? <ExportIcon/> : exportLabel}
+        </Button>
+        <Menu id={exportMenuId} anchorEl={exportAnchor} open={Boolean(exportAnchor)}
+          onClose={() => setExportAnchor(null)} slotProps={{ list: { 'aria-labelledby': `${exportMenuId}-button` } }}>
+          {exporting.map(format => <MenuItem key={format} disabled={Boolean(exportingFormat) || busy || externalLoading}
+            onClick={() => runExport(format, handlers[format])}>{format.toUpperCase()}</MenuItem>)}
+        </Menu>
+      </>}
     </Toolbar>
     {(externalError || requestError || exportError) && <Alert severity="error">{String(externalError?.message || externalError || requestError || exportError)}</Alert>}
     <TableContainer sx={{ overflowX: 'auto' }}>

@@ -60,7 +60,8 @@ describe('DynamicTable', () => {
   it('exports all filtered client rows and surfaces handler failures', async () => {
     const handler=vi.fn(async()=>{throw new Error('Export unavailable');});
     render(<DynamicTable columns={columns} data={data} pageSize={1} pageSizeOptions={[1,2]} exportHandlers={{csv:handler}}/>);
-    fireEvent.click(screen.getByText('Export CSV'));
+    fireEvent.click(screen.getByRole('button', {name:'Export'}));
+    fireEvent.click(screen.getByRole('menuitem', {name:'CSV'}));
     expect(handler.mock.calls[0][0].rows).toEqual(data);
     expect(await screen.findByRole('alert')).toHaveTextContent('Export unavailable');
   });
@@ -112,6 +113,30 @@ describe('DynamicTable', () => {
     rerender(<DynamicTable columns={columns} data={data}/>);
     expect(await screen.findByText('Ada')).toBeInTheDocument();
     expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
+  });
+
+  it('shows all five built-in export choices in one dropdown', () => {
+    render(<DynamicTable columns={columns} data={data}/>);
+    fireEvent.click(screen.getByRole('button', {name:'Export'}));
+    expect(screen.getAllByRole('menuitem').map(item=>item.textContent)).toEqual(['PDF','TXT','JSON','XLSX','CSV']);
+  });
+  it('supports an icon-only button, configurable formats, and legacy Excel handlers', async () => {
+    const excel=vi.fn();
+    render(<DynamicTable columns={columns} data={data} exportButtonDisplay="icon"
+      exportFilename="customers" exportFormats={['xlsx','excel']} exportHandlers={{excel}}/>);
+    const button=screen.getByRole('button',{name:'Export'});
+    expect(button.textContent).toBe('');
+    fireEvent.click(button);
+    expect(screen.getAllByRole('menuitem')).toHaveLength(1);
+    fireEvent.click(screen.getByRole('menuitem',{name:'XLSX'}));
+    await waitFor(()=>expect(excel).toHaveBeenCalledWith(expect.objectContaining({rows:data,filename:'customers.xlsx'})));
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+  });
+  it('supports hiding exports and disables exports while loading', () => {
+    const {rerender}=render(<DynamicTable columns={columns} data={data} enableExport={false}/>);
+    expect(screen.queryByRole('button',{name:'Export'})).not.toBeInTheDocument();
+    rerender(<DynamicTable columns={columns} data={data} loading/>);
+    expect(screen.getByRole('button',{name:'Export'})).toBeDisabled();
   });
 
 });
